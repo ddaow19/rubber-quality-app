@@ -1,12 +1,8 @@
-import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
 import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 import pandas as pd
-import os
 from datetime import datetime, timedelta
 
 
@@ -69,9 +65,7 @@ CLASS_DETAILS = {
 # ─── Load Model ───────────────────────────────────────────
 @st.cache_resource
 def load_model():
-    import os
-    os.environ["TF_USE_LEGACY_KERAS"] = "1"   # ← บังคับใช้ Keras แบบเดิม
-    return tf.keras.models.load_model("vgg16_best.keras")
+    return tf.keras.models.load_model("vgg16_best.keras", compile=False)
 
 model = load_model()
 
