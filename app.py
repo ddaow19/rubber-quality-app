@@ -65,6 +65,8 @@ CLASS_DETAILS = {
 # ─── Load Model ───────────────────────────────────────────
 @st.cache_resource
 def load_model():
+    import os
+    os.environ["TF_USE_LEGACY_KERAS"] = "1"   # ← บังคับใช้ Keras แบบเดิม
     return tf.keras.models.load_model("vgg16_best.keras")
 
 model = load_model()
