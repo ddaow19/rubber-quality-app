@@ -1,0 +1,278 @@
+import streamlit as st
+import tensorflow as tf
+import numpy as np
+from PIL import Image
+
+# ─── Page Config ──────────────────────────────────────────
+st.set_page_config(
+    page_title="ระบบจำแนกคุณภาพยางพาราแผ่นดิบ",
+    page_icon="🌿",
+    layout="centered"
+)
+
+# ─── Class Labels ─────────────────────────────────────────
+CLASS_NAMES = ["3", "4", "5", "B"]
+IMG_SIZE = (224, 224)
+
+# ─── Class Details ────────────────────────────────────────
+CLASS_DETAILS = {
+    "3": {
+        "emoji": "🟢",
+        "title": "ยางชั้น 3 — คุณภาพดี",
+        "color": "green",
+        "details": [
+            ("🎨 สี", "น้ำตาลอ่อนหรือเหลืองทองสม่ำเสมอ"),
+            ("💪 เนื้อยาง", "มีความยืดหยุ่นดี ความใสและความสะอาดสูง"),
+            ("🔵 รูพรุน", "น้อยมากหรือแทบไม่มีเลย"),
+            ("⚠️ ตำหนิที่อนุโลม", "ฟองอากาศขนาดเล็กมาก (Pinhead size) ได้เพียงเล็กน้อย"),
+            ("❌ ตำหนิที่ไม่อนุโลม", "ห้ามมีสิ่งเจือปนหรือคราบเชื้อราที่มองเห็นได้ชัดเจน"),
+        ]
+    },
+    "4": {
+        "emoji": "🟡",
+        "title": "ยางชั้น 4 — คุณภาพปานกลาง",
+        "color": "orange",
+        "details": [
+            ("🎨 สี", "เข้มกว่าชั้น 3 เล็กน้อย หรือมีสีไม่สม่ำเสมอในบางจุด (ความด่าง)"),
+            ("💪 เนื้อยาง", "มาตรฐานทั่วไป พบมากที่สุดในตลาด"),
+            ("🔵 รูพรุน", "พบฟองอากาศได้บ้างเล็กน้อย"),
+            ("⚠️ ตำหนิที่อนุโลม", "คราบแห้งของน้ำยาง หรือจุดด่างดำขนาดเล็กจากฝุ่นละออง"),
+            ("❌ ตำหนิที่ไม่อนุโลม", "ห้ามมีรอยไหม้หรือคราบราที่เป็นอันตรายต่อเนื้อยาง"),
+        ]
+    },
+    "5": {
+        "emoji": "🟠",
+        "title": "ยางชั้น 5 — คุณภาพต่ำ",
+        "color": "red",
+        "details": [
+            ("🎨 สี", "สีเข้มหรือสีคล้ำ (Opaque)"),
+            ("💪 เนื้อยาง", "อาจมีความกระด้างหรือยืดหยุ่นลดลง"),
+            ("🔵 รูพรุน", "พบฟองอากาศขนาดใหญ่ขึ้น"),
+            ("⚠️ ตำหนิที่อนุโลม", "จุดตำหนิจากสิ่งสกปรก คราบเขม่า หรือรอยเปื้อนจากการตากยางที่ไม่ดี"),
+            ("❌ เงื่อนไข", "ยังต้องอยู่ในเกณฑ์ที่สามารถนำไปแปรรูปในอุตสาหกรรมได้"),
+        ]
+    },
+    "B": {
+        "emoji": "🔴",
+        "title": "Class B — ยางมีตำหนิ / ไม่ผ่านมาตรฐาน",
+        "color": "red",
+        "details": [
+            ("🎨 สภาพ", "แผ่นยางมีความชื้นสูงเกินไป หรืออาการยางเหนียว (Sticky)"),
+            ("💪 เนื้อยาง", "แผ่นยางติดกันเป็นปึก หรือเสียหายอย่างชัดเจน"),
+            ("🔵 รูพรุน", "มีรอยไหม้อย่างรุนแรง"),
+            ("❌ ตำหนิหลัก", "พบเชื้อรา (Mold) อย่างชัดเจน หรือสิ่งปลอมปนขนาดใหญ่ เช่น เปลือกไม้ ก้อนหิน"),
+            ("💰 ผลกระทบ", "ถูกหักราคาจากสหกรณ์ค่อนข้างมาก"),
+        ]
+    },
+}
+
+# ─── Load Model ───────────────────────────────────────────
+@st.cache_resource
+def load_model():
+    model = tf.keras.models.load_model("vgg16_best.keras")
+    return model
+
+model = load_model()
+
+# ─── Preprocessing ────────────────────────────────────────
+def preprocess_image(image: Image.Image) -> np.ndarray:
+    img = image.convert("RGB")
+    img = img.resize(IMG_SIZE)
+    img_array = np.array(img, dtype=np.float32)
+    img_array = tf.keras.applications.vgg16.preprocess_input(img_array)
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
+# ══════════════════════════════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════════════════════════════
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Rubber_plantation.jpg/320px-Rubber_plantation.jpg",
+             use_column_width=True)
+    st.markdown("## 🌿 เมนูหลัก")
+    st.divider()
+
+    menu = st.radio(
+        label="เลือกเมนู",
+        options=[
+            "🏢 รายละเอียดเกี่ยวกับหน่วยงาน",
+            "📖 คำชี้แจงการใช้งาน",
+            "🔍 ทำนายคุณภาพชั้นยางพารา",
+        ],
+        label_visibility="collapsed"
+    )
+
+    st.divider()
+    st.caption("© สหกรณ์กองทุนสวนยางแคนดง จำกัด")
+    st.caption("พัฒนาโดย: โครงการวิจัย AI ยางพารา")
+
+# ══════════════════════════════════════════════════════════
+# PAGE: รายละเอียดเกี่ยวกับหน่วยงาน
+# ══════════════════════════════════════════════════════════
+if menu == "🏢 รายละเอียดเกี่ยวกับหน่วยงาน":
+    st.title("🏢 รายละเอียดเกี่ยวกับหน่วยงาน")
+    st.divider()
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown("### สหกรณ์กองทุนสวนยางแคนดง จำกัด")
+        st.markdown("""
+        สหกรณ์กองทุนสวนยางแคนดง จำกัด เป็นองค์กรที่ดำเนินงานด้านการรวบรวม
+        และจำหน่ายผลผลิตยางพาราของเกษตรกรในพื้นที่ โดยมีบทบาทสำคัญในการ
+        กำหนดมาตรฐานคุณภาพยางแผ่นดิบ (Air Dried Sheets: ADS) เพื่อให้เกษตรกร
+        ได้รับราคาที่เป็นธรรมตามคุณภาพที่แท้จริงของผลผลิต
+        """)
+
+    with col2:
+        st.metric("📦 มาตรฐานที่ใช้", "Green Book")
+        st.metric("🌿 ประเภทยาง", "ADS")
+
+    st.divider()
+
+    st.markdown("### 🎯 พันธกิจ")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.info("🤝 รวบรวมและจำหน่ายผลผลิตยางพาราของสมาชิกในราคาที่เป็นธรรม")
+        st.info("📊 กำหนดมาตรฐานคุณภาพยางแผ่นดิบตามเกณฑ์ Green Book")
+    with col_b:
+        st.info("🔬 ส่งเสริมการใช้เทคโนโลยี AI ในการตรวจสอบคุณภาพยาง")
+        st.info("👨‍🌾 พัฒนาความรู้และทักษะให้แก่เกษตรกรสมาชิก")
+
+    st.divider()
+
+    st.markdown("### 📋 มาตรฐานการจัดชั้นคุณภาพยางแผ่นดิบ (ADS)")
+    for cls, info in CLASS_DETAILS.items():
+        with st.expander(f"{info['emoji']} {cls} — {info['title']}"):
+            for icon_label, desc in info["details"]:
+                st.markdown(f"- **{icon_label}:** {desc}")
+
+# ══════════════════════════════════════════════════════════
+# PAGE: คำชี้แจงการใช้งาน
+# ══════════════════════════════════════════════════════════
+elif menu == "📖 คำชี้แจงการใช้งาน":
+    st.title("📖 คำชี้แจงการใช้งาน")
+    st.divider()
+
+    st.markdown("### 🤖 เกี่ยวกับระบบ AI")
+    st.markdown("""
+    ระบบนี้ใช้โมเดล **VGG16** ที่ผ่านการฝึกสอน (Fine-tuning) ด้วยภาพยางพาราแผ่นดิบ
+    จากสหกรณ์กองทุนสวนยางแคนดง จำกัด เพื่อจำแนกคุณภาพยางออกเป็น 4 คลาส
+    ได้แก่ Class 3, Class 4, Class 5 และ Class B
+    """)
+
+    st.divider()
+
+    st.markdown("### 📸 วิธีการใช้งาน")
+    steps = [
+        ("1️⃣", "เลือกเมนู **ทำนายคุณภาพชั้นยางพารา** จากแถบด้านซ้าย"),
+        ("2️⃣", "คลิกปุ่ม **Browse files** หรือลากไฟล์ภาพมาวาง"),
+        ("3️⃣", "รอระบบประมวลผล (ประมาณ 2–5 วินาที)"),
+        ("4️⃣", "ดูผลการจำแนกคลาส ความมั่นใจ และรายละเอียดคุณภาพ"),
+    ]
+    for icon, step in steps:
+        st.markdown(f"{icon} {step}")
+
+    st.divider()
+
+    st.markdown("### 📁 รูปแบบไฟล์ที่รองรับ")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.success("✅ .JPG / .JPEG")
+    with col2:
+        st.success("✅ .PNG")
+    with col3:
+        st.warning("⚠️ ขนาดแนะนำ ≥ 224×224 px")
+
+    st.divider()
+
+    st.markdown("### ⚠️ ข้อควรระวัง")
+    st.warning("""
+    - ผลการทำนายจาก AI เป็นเพียงการช่วยสนับสนุนการตัดสินใจเท่านั้น
+    - ควรใช้ร่วมกับการตรวจสอบโดยผู้เชี่ยวชาญเสมอ
+    - ภาพที่ถ่ายในสภาพแสงไม่เพียงพออาจส่งผลต่อความแม่นยำ
+    - ควรถ่ายภาพยางพาราในระยะใกล้และชัดเจน ไม่มีวัตถุอื่นบดบัง
+    """)
+
+    st.divider()
+
+    st.markdown("### 🎯 ความแม่นยำของโมเดล")
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.metric("🏆 โมเดล", "VGG16")
+    with col_b:
+        st.metric("📐 Input Size", "224 × 224 px")
+    with col_c:
+        st.metric("🗂️ จำนวนคลาส", "4 คลาส")
+
+# ══════════════════════════════════════════════════════════
+# PAGE: ทำนายคุณภาพชั้นยางพารา
+# ══════════════════════════════════════════════════════════
+elif menu == "🔍 ทำนายคุณภาพชั้นยางพารา":
+    st.title("🔍 ทำนายคุณภาพชั้นยางพารา")
+    st.caption("สหกรณ์กองทุนสวนยางแคนดง จำกัด | มาตรฐาน Air Dried Sheets (ADS)")
+    st.divider()
+
+    uploaded_file = st.file_uploader(
+        "📤 อัปโหลดภาพยางพาราแผ่นดิบ",
+        type=["jpg", "jpeg", "png"]
+    )
+
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### 🖼️ ภาพที่อัปโหลด")
+            st.image(image, use_column_width=True)
+
+        with col2:
+            st.markdown("#### 📊 ผลการวิเคราะห์")
+            with st.spinner("🔍 กำลังวิเคราะห์..."):
+                img_array = preprocess_image(image)
+                predictions = model.predict(img_array)
+                predicted_class = int(np.argmax(predictions[0]))
+                confidence = float(np.max(predictions[0])) * 100
+
+            predicted_label = CLASS_NAMES[predicted_class]
+            info = CLASS_DETAILS[predicted_label]
+
+            st.markdown(f"## {info['emoji']} {predicted_label}")
+            st.markdown(f"**{info['title']}**")
+            st.metric(label="🎯 ความมั่นใจ", value=f"{confidence:.2f}%")
+
+            st.divider()
+
+            st.markdown("#### 📈 ความน่าจะเป็นแต่ละคลาส")
+            for cls, prob in zip(CLASS_NAMES, predictions[0]):
+                st.progress(float(prob), text=f"{cls} : {prob*100:.1f}%")
+
+        st.divider()
+
+        # ─── Class Detail ─────────────────────────────────
+        st.markdown(f"### {info['emoji']} รายละเอียด {predicted_label} — {info['title']}")
+        for icon_label, desc in info["details"]:
+            st.markdown(f"- **{icon_label}:** {desc}")
+
+        st.divider()
+
+        # ─── คำแนะนำ ──────────────────────────────────────
+        st.markdown("#### 💡 คำแนะนำ")
+        if predicted_label == "3":
+            st.success("ยางคุณภาพดี เหมาะสำหรับการจำหน่ายในราคาสูงสุด ควรรักษาคุณภาพในกระบวนการผลิตต่อไป")
+        elif predicted_label == "4":
+            st.info("ยางคุณภาพมาตรฐาน สามารถจำหน่ายได้ในราคาปกติ ควรปรับปรุงกระบวนการรีดและตากยางเพื่อยกระดับเป็น Class 3")
+        elif predicted_label == "5":
+            st.warning("ยางคุณภาพต่ำ ราคาจำหน่ายจะต่ำกว่ามาตรฐาน ควรตรวจสอบกระบวนการตากยางและความสะอาดในการผลิต")
+        elif predicted_label == "B":
+            st.error("ยางไม่ผ่านมาตรฐาน จะถูกหักราคาอย่างมาก ควรตรวจสอบความชื้น เชื้อรา และสิ่งปลอมปนในกระบวนการผลิตทันที")
+
+    else:
+        st.info("👆 กรุณาอัปโหลดภาพยางพาราแผ่นดิบเพื่อเริ่มการวิเคราะห์")
+        st.markdown("##### 💡 เคล็ดลับการถ่ายภาพ")
+        st.markdown("""
+        - 📷 ถ่ายภาพในที่แสงสว่างเพียงพอ
+        - 🎯 ถ่ายให้เห็นเนื้อยางชัดเจน ไม่มีวัตถุบดบัง
+        - 📐 ระยะห่างจากแผ่นยางประมาณ 30–50 ซม.
+        - 🚫 หลีกเลี่ยงภาพเบลอหรือมีแสงสะท้อน
+        """)
