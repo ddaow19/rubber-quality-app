@@ -65,7 +65,6 @@ CLASS_DETAILS = {
 # ─── Load Model ───────────────────────────────────────────
 @st.cache_resource
 def load_model():
-    import keras
     return tf.keras.models.load_model("vgg16_best.keras", compile=False)
 
 model = load_model()
